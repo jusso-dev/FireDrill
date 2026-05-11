@@ -1,0 +1,57 @@
+groups:
+  - name: firedrill.alerts
+    interval: 15s
+    rules:
+      - alert: FireDrillHighErrorRate
+        expr: |
+          (
+            sum(rate(firedrill_http_requests_total{status=~"5.."}[2m]))
+            /
+            clamp_min(sum(rate(firedrill_http_requests_total[2m])), 1)
+          ) > 0.05
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HTTP 5xx rate above 5%"
+          runbook: "/runbooks#error_storm"
+
+      - alert: FireDrillHighLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(firedrill_http_request_duration_seconds_bucket[2m]))
+          ) > 0.5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 latency above 500ms"
+          runbook: "/runbooks#latency_spike"
+
+      - alert: FireDrillQueueBacklog
+        expr: max(firedrill_queue_depth) > 100
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Queue depth above 100"
+          runbook: "/runbooks#queue_backlog"
+
+      - alert: FireDrillWorkerFailures
+        expr: sum(rate(firedrill_jobs_failed_total[2m])) > 0.1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Worker is failing jobs"
+          runbook: "/runbooks#worker_failure"
+
+      - alert: FireDrillDatabaseDegraded
+        expr: firedrill_database_healthy < 1
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database health check failing"
+          runbook: "/runbooks#db_slowdown"

@@ -1,0 +1,25 @@
+{
+  "name": "firedrill",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted SRE incident simulation lab",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "up": "docker compose up --build",
+    "down": "docker compose down -v",
+    "logs": "docker compose logs -f",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "playwright test",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "tsx": "^4.21.0"
+  }
+}

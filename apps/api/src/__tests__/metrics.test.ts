@@ -21,13 +21,13 @@ describe("metrics", () => {
   it("scenarioActive gauge toggles", async () => {
     setScenarioGauge("latency_spike", true);
     let json = await register.getMetricsAsJSON();
-    let g = json.find((m) => m.name === "firedrill_scenario_active") as {
+    let g = json.find((m) => m.name === "firedrill_scenario_active") as unknown as {
       values: Array<{ labels: { scenario: string }; value: number }>;
     };
     expect(g.values.find((v) => v.labels.scenario === "latency_spike")?.value).toBe(1);
     setScenarioGauge("latency_spike", false);
     json = await register.getMetricsAsJSON();
-    g = json.find((m) => m.name === "firedrill_scenario_active") as {
+    g = json.find((m) => m.name === "firedrill_scenario_active") as unknown as {
       values: Array<{ labels: { scenario: string }; value: number }>;
     };
     expect(g.values.find((v) => v.labels.scenario === "latency_spike")?.value).toBe(0);

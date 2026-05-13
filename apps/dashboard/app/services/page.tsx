@@ -1,79 +1,76 @@
 "use client";
 import {
-  BayTag,
   Card,
-  CardEyebrow,
-  DispatchLine,
+  ErrorPanel,
+  PageHeader,
+  SectionLabel,
   StatusPill,
 } from "@/components/ui";
 import { usePoll } from "@/components/usePoll";
 import type { OverviewSnapshot } from "@firedrill/shared";
 
-const ROLES: Record<string, { role: string; line: string }> = {
+const ROLES: Record<string, { role: string; detail: string }> = {
   api: {
-    role: "Edge / HTTP",
-    line: "Fastify · scenario host · /metrics · port 4000",
+    role: "Edge · HTTP",
+    detail: "Fastify · scenario host · /metrics · port 4000",
   },
   worker: {
     role: "Background",
-    line: "BullMQ consumer · emails / orders / invoices · /metrics on 4001",
+    detail: "BullMQ consumer · emails / orders / invoices · port 4001",
   },
   postgres: {
     role: "Datastore",
-    line: "Primary OLTP · incidents, products, orders",
+    detail: "Primary OLTP · incidents, products, orders",
   },
   redis: {
     role: "Broker",
-    line: "BullMQ broker · scenario state cache",
+    detail: "BullMQ broker · scenario state cache",
   },
 };
 
 export default function ServicesPage() {
-  const { data } = usePoll<OverviewSnapshot>("/api/overview", 3000);
-  const degraded = (data?.services ?? []).filter((s) => s.status !== "healthy").length;
+  const { data, error } = usePoll<OverviewSnapshot>("/api/overview", 3000);
+  const services = data?.services ?? [];
+  const degraded = services.filter((s) => s.status !== "healthy").length;
+
   return (
-    <div className="space-y-8">
-      <DispatchLine
-        bay="04"
-        page="Services"
+    <div className="space-y-6">
+      <PageHeader
+        title="Services"
+        subtitle="The four components of the stack and their current status."
         alarm={degraded > 0}
-        state={
+        status={
           degraded > 0 ? (
-            <span className="text-ember-500">{degraded} bay{degraded > 1 ? "s" : ""} not green</span>
+            <span className="text-ember-500">
+              {degraded} service{degraded > 1 ? "s" : ""} degraded
+            </span>
           ) : (
-            <span className="text-signal-green">apparatus check ok</span>
+            <span className="text-signal-green">all healthy</span>
           )
         }
       />
 
+      {error && <ErrorPanel title="Cannot reach API" message={error} />}
+
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {(data?.services ?? []).map((s, i) => {
-          const meta = ROLES[s.service] ?? { role: "service", line: "" };
-          const alarm = s.status === "down";
+        {services.map((s) => {
+          const meta = ROLES[s.service] ?? { role: "service", detail: "" };
           return (
-            <Card key={s.service} alarm={alarm} rivets>
-              <div className="flex items-start justify-between">
+            <Card key={s.service} alarm={s.status === "down"}>
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <BayTag bay={i + 1} alarm={alarm} />
-                  <h3 className="mt-2 text-[1.25rem] font-semibold tracking-tight text-bone-100">
+                  <h3 className="text-lg font-semibold tracking-tight text-bone-100">
                     {s.service}
                   </h3>
-                  <div className="font-mono text-[10px] tracking-[0.22em] uppercase text-steel-400 mt-1">
+                  <div className="font-mono text-[10px] uppercase tracking-wider text-steel-400 mt-1">
                     {meta.role}
                   </div>
                 </div>
                 <StatusPill status={s.status} />
               </div>
-
-              <div className="mt-5 pt-4 border-t border-concrete-700/60">
-                <div className="dispatch-eyebrow text-steel-400">Role</div>
-                <p className="mt-1 text-sm text-bone-200 font-mono">
-                  {meta.line}
-                </p>
-              </div>
-
-              <div className="mt-4">
-                <div className="dispatch-eyebrow text-steel-400">Status detail</div>
+              <p className="mt-4 text-xs text-steel-400 font-mono">{meta.detail}</p>
+              <div className="mt-3 pt-3 border-t border-[var(--border)]">
+                <span className="eyebrow">status</span>
                 <p className="mt-1 text-sm text-bone-200">{s.detail}</p>
               </div>
             </Card>
@@ -82,12 +79,12 @@ export default function ServicesPage() {
       </section>
 
       <Card>
-        <CardEyebrow>Topology</CardEyebrow>
-        <pre className="mt-4 text-[11px] leading-[1.4] font-mono text-steel-300 overflow-x-auto">
-{`browser  →  dashboard:3000  →  api:4000  ─┬─→  postgres:5432
-                                          └─→  redis:6379  ←─  worker:4001
-                          prometheus:9090  →  scrape  api + worker
-                          grafana:3001     →  query   prometheus`}
+        <SectionLabel>Topology</SectionLabel>
+        <pre className="mt-3 text-[11px] leading-[1.5] font-mono text-steel-300 overflow-x-auto">
+{`browser  →  dashboard  →  api  ─┬─→  postgres
+                                └─→  redis  ←─  worker
+                prometheus  →  scrapes  api + worker
+                grafana     →  queries  prometheus`}
         </pre>
       </Card>
     </div>

@@ -1,6 +1,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono, Saira_Stencil_One } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import { SideNav } from "@/components/nav";
 
 const inter = Inter({
@@ -13,15 +13,9 @@ const mono = JetBrains_Mono({
   variable: "--font-mono",
   display: "swap",
 });
-const stencil = Saira_Stencil_One({
-  subsets: ["latin"],
-  weight: "400",
-  variable: "--font-stencil",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
-  title: "FireDrill — Station Control",
+  title: "FireDrill",
   description: "Self-hosted SRE incident simulation lab",
 };
 
@@ -33,12 +27,12 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${mono.variable} ${stencil.variable} dark`}
+      className={`${inter.variable} ${mono.variable} dark`}
     >
-      <body className="min-h-screen">
+      <body className="min-h-screen antialiased">
         <div className="flex min-h-screen">
           <SideNav />
-          <main className="flex-1 px-6 lg:px-10 py-8 max-w-[1480px]">
+          <main className="flex-1 px-6 lg:px-10 py-8 mx-auto w-full max-w-[1400px]">
             {children}
           </main>
         </div>

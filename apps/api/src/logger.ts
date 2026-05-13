@@ -1,51 +1,63 @@
-import pino from "pino";
+import pino, { type LoggerOptions } from "pino";
 
-interface LogEntry {
+/**
+ * Standalone logger — does NOT pull in the strict config module. That keeps
+ * unit tests (which don't set DATABASE_URL/REDIS_URL) able to import any
+ * file that transitively uses the logger.
+ */
+
+export interface LogEntry {
   at: string;
   level: string;
   service: string;
   msg: string;
 }
 
-const logBuffer: LogEntry[] = [];
 const MAX_LOGS = 500;
+const buffer: LogEntry[] = [];
 
-function pushLog(level: string, msg: string) {
-  logBuffer.push({ at: new Date().toISOString(), level, service: "api", msg });
-  if (logBuffer.length > MAX_LOGS) logBuffer.shift();
+function record(level: string, msg: string): void {
+  if (!msg) return;
+  buffer.push({ at: new Date().toISOString(), level, service: "api", msg });
+  if (buffer.length > MAX_LOGS) buffer.shift();
 }
 
-export const logger = pino({
+/**
+ * Extract a string message from pino's variadic call shape:
+ *   logger.info("msg")
+ *   logger.info({ a: 1 }, "msg")
+ *   logger.info({ msg: "msg", a: 1 })
+ */
+function extractMsg(args: unknown[]): string {
+  const [first, second] = args;
+  if (typeof first === "string") return first;
+  if (typeof second === "string") return second;
+  if (first && typeof first === "object" && "msg" in first) {
+    const m = (first as { msg: unknown }).msg;
+    if (typeof m === "string") return m;
+  }
+  return "";
+}
+
+const options: LoggerOptions = {
   level: process.env.LOG_LEVEL ?? "info",
   base: { service: "api" },
   transport:
     process.env.NODE_ENV === "production"
       ? undefined
-      : { target: "pino-pretty", options: { colorize: true } },
+      : { target: "pino-pretty", options: { colorize: true, singleLine: true } },
   hooks: {
     logMethod(args, method, level) {
       const label = pino.levels.labels[level] ?? "info";
-      const first = args[0];
-      let msg = "";
-      if (typeof first === "string") {
-        msg = first;
-      } else if (
-        first &&
-        typeof first === "object" &&
-        "msg" in (first as Record<string, unknown>) &&
-        typeof (first as { msg: unknown }).msg === "string"
-      ) {
-        msg = (first as { msg: string }).msg;
-      } else if (typeof args[1] === "string") {
-        msg = args[1];
-      }
-      if (msg) pushLog(label, msg);
-      // @ts-expect-error pino hook signature
-      return method.apply(this, args);
+      record(label, extractMsg(args));
+      return method.apply(this, args as Parameters<typeof method>);
     },
   },
-});
+};
+
+export const logger = pino(options);
 
 export function recentLogs(limit = 200): LogEntry[] {
-  return logBuffer.slice(-limit).reverse();
+  const n = Math.min(Math.max(1, Math.floor(limit)), MAX_LOGS);
+  return buffer.slice(-n).reverse();
 }

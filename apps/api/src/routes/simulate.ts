@@ -1,7 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { Queue } from "bullmq";
-import { redis } from "../redis.js";
-import { isScenarioId, SCENARIOS, SCENARIO_IDS } from "@firedrill/shared";
+import { SCENARIOS, SCENARIO_IDS, isScenarioId } from "@firedrill/shared";
 import {
   disableScenario,
   enableScenario,
@@ -16,71 +14,61 @@ import {
   resolveIncident,
 } from "../incidents.js";
 import { startMemoryPressure, stopMemoryPressure } from "../memory.js";
+import { startBacklog, stopBacklog } from "../backlog.js";
+import { badRequest, notFound } from "../errors.js";
 import { logger } from "../logger.js";
 
-const backlogQueue = new Queue("emails", { connection: redis });
-let backlogInterval: NodeJS.Timeout | null = null;
-
-function startBacklog(perSecond: number) {
-  if (backlogInterval) clearInterval(backlogInterval);
-  const safe = Math.min(Math.max(1, perSecond), 100);
-  backlogInterval = setInterval(async () => {
-    try {
-      await backlogQueue.addBulk(
-        Array.from({ length: safe }, (_, i) => ({
-          name: "backlog_email",
-          data: { i, ts: Date.now() },
-        })),
-      );
-    } catch (err) {
-      logger.error({ err }, "backlog producer failed");
-    }
-  }, 1000);
-}
-
-function stopBacklog() {
-  if (backlogInterval) {
-    clearInterval(backlogInterval);
-    backlogInterval = null;
-  }
+interface SimulateBody {
+  enabled?: boolean;
+  intensity?: number;
 }
 
 export async function simulateRoutes(app: FastifyInstance) {
   app.get("/api/scenarios", async () => {
     const states = await getAllScenarios();
+    const byId = new Map(states.map((s) => [s.id, s]));
     return {
       scenarios: SCENARIO_IDS.map((id) => ({
         ...SCENARIOS[id],
-        state: states.find((s) => s.id === id)!,
+        state: byId.get(id)!,
       })),
     };
   });
 
-  app.post<{
-    Params: { scenario: string };
-    Body: { enabled?: boolean; intensity?: number };
-  }>("/api/simulate/:scenario", async (req, reply) => {
-    const { scenario } = req.params;
-    if (!isScenarioId(scenario)) {
-      return reply.code(400).send({ error: `unknown scenario: ${scenario}` });
-    }
-    const enabled = req.body?.enabled ?? true;
+  app.post<{ Params: { scenario: string }; Body: SimulateBody }>(
+    "/api/simulate/:scenario",
+    async (req) => {
+      const { scenario } = req.params;
+      if (!isScenarioId(scenario)) {
+        throw notFound(`unknown scenario '${scenario}'`);
+      }
 
-    if (enabled) {
-      const existing = await activeIncidentForScenario(scenario);
-      const incident = existing ?? (await createIncident(scenario));
-      const state = await enableScenario(scenario, {
-        intensity: req.body?.intensity,
-        incidentId: incident.id,
-      });
-      if (scenario === "queue_backlog") startBacklog(state.intensity);
-      if (scenario === "memory_pressure") startMemoryPressure(state.intensity);
-      logger.warn({ scenario, incidentId: incident.id }, "scenario enabled");
-      return { scenario: state, incident };
-    } else {
+      const body = req.body ?? {};
+      if (body.intensity !== undefined && typeof body.intensity !== "number") {
+        throw badRequest("intensity must be a number");
+      }
+      const enabled = body.enabled ?? true;
+
+      if (enabled) {
+        const existing = await activeIncidentForScenario(scenario);
+        const incident = existing ?? (await createIncident(scenario));
+        const state = await enableScenario(scenario, {
+          intensity: body.intensity,
+          incidentId: incident.id,
+        });
+        if (scenario === "queue_backlog") startBacklog(state.intensity);
+        if (scenario === "memory_pressure") startMemoryPressure(state.intensity);
+        logger.warn(
+          { scenario, intensity: state.intensity, incidentId: incident.id },
+          "scenario enabled",
+        );
+        return { scenario: state, incident };
+      }
+
       const state = await disableScenario(scenario);
       if (scenario === "queue_backlog") stopBacklog();
       if (scenario === "memory_pressure") stopMemoryPressure();
+
       let incident = null;
       if (state.incidentId) {
         incident = await resolveIncident(state.incidentId);
@@ -94,21 +82,22 @@ export async function simulateRoutes(app: FastifyInstance) {
       }
       logger.info({ scenario }, "scenario disabled");
       return { scenario: state, incident };
-    }
-  });
+    },
+  );
 
   app.post("/api/simulate/reset", async () => {
     await resetAll();
     stopBacklog();
     stopMemoryPressure();
+    logger.warn("all scenarios reset");
     return { ok: true };
   });
 
   app.get<{ Params: { scenario: string } }>(
     "/api/scenarios/:scenario",
-    async (req, reply) => {
+    async (req) => {
       if (!isScenarioId(req.params.scenario)) {
-        return reply.code(404).send({ error: "unknown scenario" });
+        throw notFound(`unknown scenario '${req.params.scenario}'`);
       }
       return getScenario(req.params.scenario);
     },

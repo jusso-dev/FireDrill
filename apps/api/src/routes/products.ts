@@ -8,9 +8,13 @@ export async function productRoutes(app: FastifyInstance) {
     const end = dbQueryDuration.labels("select_products").startTimer();
     try {
       const slowdown = await intensityIfActive("db_slowdown");
-      if (slowdown) await new Promise((r) => setTimeout(r, slowdown));
+      if (slowdown && slowdown > 0) {
+        await new Promise((resolve) => setTimeout(resolve, slowdown));
+      }
       const { rows } = await pool.query(
-        "SELECT id, name, price_cents AS \"priceCents\" FROM products ORDER BY id",
+        `SELECT id, name, price_cents AS "priceCents"
+           FROM products
+          ORDER BY id`,
       );
       return { products: rows };
     } finally {

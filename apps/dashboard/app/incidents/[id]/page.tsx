@@ -1,16 +1,16 @@
 "use client";
 import {
   Badge,
-  BayTag,
   Button,
   Card,
-  CardEyebrow,
-  DispatchLine,
+  ErrorPanel,
+  PageHeader,
+  SectionLabel,
   StatusDot,
 } from "@/components/ui";
 import { apiFetch, postJson } from "@/lib/api";
 import type { Incident, IncidentReport } from "@firedrill/shared";
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 export default function IncidentDetail({
@@ -24,36 +24,41 @@ export default function IncidentDetail({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     try {
-      const i = await apiFetch<Incident>(`/api/incidents/${id}`);
-      setIncident(i);
+      setIncident(await apiFetch<Incident>(`/api/incidents/${id}`));
+      setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }
+  }, [id]);
 
   useEffect(() => {
     refresh();
     const t = setInterval(refresh, 3000);
     return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [refresh]);
 
   async function resolve() {
     setBusy(true);
+    setError(null);
     try {
       await postJson(`/api/incidents/${id}/resolve`, {});
       await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
   }
+
   async function genReport() {
     setBusy(true);
+    setError(null);
     try {
-      const r = await apiFetch<IncidentReport>(`/api/incidents/${id}/report`);
-      setReport(r);
+      setReport(await apiFetch<IncidentReport>(`/api/incidents/${id}/report`));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
@@ -62,12 +67,11 @@ export default function IncidentDetail({
   const open = incident?.status === "open";
 
   return (
-    <div className="space-y-8">
-      <DispatchLine
-        bay="02"
-        page={`Incident ${id}`}
+    <div className="space-y-6">
+      <PageHeader
+        title={`Incident ${id}`}
         alarm={open}
-        state={
+        status={
           open ? (
             <span className="text-ember-500">live</span>
           ) : incident ? (
@@ -76,33 +80,8 @@ export default function IncidentDetail({
             <span className="text-steel-400">loading…</span>
           )
         }
-      />
-
-      {error && (
-        <Card alarm>
-          <p className="text-ember-400 text-sm font-mono">{error}</p>
-        </Card>
-      )}
-
-      {incident && (
-        <>
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              {open ? (
-                <Badge tone="bad">
-                  <StatusDot status="down" pulse />
-                  open
-                </Badge>
-              ) : (
-                <Badge tone="good">resolved</Badge>
-              )}
-              <Link
-                href={`/runbooks#${incident.scenarioId}`}
-                className="dispatch-eyebrow text-ember-500 hover:text-ember-400"
-              >
-                runbook · {incident.scenarioId} →
-              </Link>
-            </div>
+        actions={
+          incident ? (
             <div className="flex gap-2">
               {open && (
                 <Button variant="danger" onClick={resolve} disabled={busy}>
@@ -113,11 +92,34 @@ export default function IncidentDetail({
                 generate report
               </Button>
             </div>
+          ) : null
+        }
+      />
+
+      {error && <ErrorPanel title="Error" message={error} />}
+
+      {incident && (
+        <>
+          <div className="flex items-center gap-3">
+            {open ? (
+              <Badge tone="bad">
+                <StatusDot status="down" pulse />
+                open
+              </Badge>
+            ) : (
+              <Badge tone="good">resolved</Badge>
+            )}
+            <Link
+              href={`/runbooks#${incident.scenarioId}`}
+              className="text-xs text-ember-500 hover:text-ember-400 font-mono"
+            >
+              runbook · {incident.scenarioId} →
+            </Link>
           </div>
 
-          <Card alarm={open} rivets>
-            <CardEyebrow alarm={open}>Summary</CardEyebrow>
-            <p className="mt-3 text-sm leading-relaxed text-bone-200 max-w-[70ch]">
+          <Card alarm={open}>
+            <SectionLabel alarm={open}>Summary</SectionLabel>
+            <p className="mt-2 text-sm leading-relaxed text-bone-200 max-w-[70ch]">
               {incident.summary}
             </p>
             <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3">
@@ -130,34 +132,29 @@ export default function IncidentDetail({
                   ? new Date(incident.endedAt).toLocaleString()
                   : "—"}
               </Meta>
-              <Meta label="affects">
-                {incident.affectedServices.join(" · ")}
-              </Meta>
+              <Meta label="affects">{incident.affectedServices.join(" · ")}</Meta>
             </div>
           </Card>
 
           <Card>
-            <div className="flex items-center justify-between">
-              <CardEyebrow>Timeline</CardEyebrow>
-              <BayTag bay="T" />
-            </div>
-            <ol className="mt-5 relative pl-8">
+            <SectionLabel>Timeline</SectionLabel>
+            <ol className="mt-4 relative pl-6">
               <span
                 aria-hidden
-                className="absolute left-[10px] top-2 bottom-2 w-px bg-concrete-700"
+                className="absolute left-[5px] top-2 bottom-2 w-px bg-[var(--border)]"
               />
               {incident.timeline.map((e, idx) => (
-                <li key={idx} className="relative pb-5 last:pb-0">
+                <li key={idx} className="relative pb-4 last:pb-0">
                   <span
                     aria-hidden
                     className={
-                      "absolute -left-[2px] top-1.5 h-2 w-2 rounded-full " +
+                      "absolute -left-[3px] top-1.5 h-2 w-2 rounded-full " +
                       (e.kind === "incident_resolved"
                         ? "bg-signal-green"
-                        : "bg-ember-500 shadow-[0_0_8px_oklch(0.64_0.21_38/0.7)]")
+                        : "bg-ember-500")
                     }
                   />
-                  <div className="font-mono text-[10px] tracking-[0.22em] uppercase text-steel-400">
+                  <div className="font-mono text-[10px] uppercase tracking-wider text-steel-400">
                     {new Date(e.at).toLocaleTimeString()} · {e.kind}
                   </div>
                   <div className="text-sm text-bone-200 mt-1">{e.message}</div>
@@ -169,25 +166,19 @@ export default function IncidentDetail({
       )}
 
       {report && (
-        <Card rivets>
+        <Card>
           <div className="flex items-center justify-between">
-            <CardEyebrow>Post-incident report</CardEyebrow>
-            <span className="font-mono text-[10px] tracking-[0.22em] uppercase text-steel-400">
+            <SectionLabel>Post-incident report</SectionLabel>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-steel-400">
               {report.source}
             </span>
           </div>
           <div className="mt-4 space-y-5 max-w-[78ch]">
-            <p className="text-sm leading-relaxed text-bone-200">
-              {report.summary}
-            </p>
+            <p className="text-sm leading-relaxed text-bone-200">{report.summary}</p>
             <Section title="Detected symptoms" items={report.detectedSymptoms} />
             <div>
-              <h4 className="dispatch-eyebrow text-steel-400">
-                Suspected root cause
-              </h4>
-              <p className="text-sm text-bone-200 mt-2">
-                {report.suspectedRootCause}
-              </p>
+              <h4 className="eyebrow">Suspected root cause</h4>
+              <p className="text-sm text-bone-200 mt-2">{report.suspectedRootCause}</p>
             </div>
             <Section title="Remediation" items={report.remediation} />
             <Section title="Prevention" items={report.prevention} />
@@ -207,19 +198,20 @@ function Meta({
 }) {
   return (
     <div>
-      <div className="dispatch-eyebrow text-concrete-600">{label}</div>
+      <div className="eyebrow">{label}</div>
       <div className="mt-1 text-bone-100 font-mono text-sm">{children}</div>
     </div>
   );
 }
+
 function Section({ title, items }: { title: string; items: string[] }) {
   return (
     <div>
-      <h4 className="dispatch-eyebrow text-steel-400">{title}</h4>
+      <h4 className="eyebrow">{title}</h4>
       <ul className="mt-2 space-y-1">
         {items.map((s, i) => (
           <li key={i} className="flex gap-2 text-sm text-bone-200">
-            <span className="font-mono text-concrete-600 mt-1">·</span>
+            <span className="font-mono text-steel-500 mt-1">·</span>
             <span>{s}</span>
           </li>
         ))}

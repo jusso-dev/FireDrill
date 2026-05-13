@@ -1,26 +1,25 @@
 "use client";
-import { BayTag, Card, CardEyebrow, DispatchLine } from "@/components/ui";
+import { Card, ErrorPanel, PageHeader, SectionLabel } from "@/components/ui";
 import { usePoll } from "@/components/usePoll";
 
 type JobsResp = {
   queues: { name: string; counts: Record<string, number> }[];
 };
 
-const ORDER = ["wait", "active", "delayed", "failed", "completed"];
+const ORDER = ["wait", "active", "delayed", "failed", "completed"] as const;
 
 export default function JobsPage() {
-  const { data } = usePoll<JobsResp>("/api/jobs", 2000);
-  const totalFailed = (data?.queues ?? []).reduce(
-    (acc, q) => acc + (q.counts.failed ?? 0),
-    0,
-  );
+  const { data, error } = usePoll<JobsResp>("/api/jobs", 2000);
+  const queues = data?.queues ?? [];
+  const totalFailed = queues.reduce((acc, q) => acc + (q.counts.failed ?? 0), 0);
+
   return (
-    <div className="space-y-8">
-      <DispatchLine
-        bay="05"
-        page="Jobs"
+    <div className="space-y-6">
+      <PageHeader
+        title="Jobs"
+        subtitle="BullMQ queues consumed by the worker. Each POST /api/orders fans out to two queues."
         alarm={totalFailed > 0}
-        state={
+        status={
           totalFailed > 0 ? (
             <span className="text-ember-500">{totalFailed} failed</span>
           ) : (
@@ -29,28 +28,27 @@ export default function JobsPage() {
         }
       />
 
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {(data?.queues ?? []).map((q, i) => (
+      {error && <ErrorPanel title="Cannot reach API" message={error} />}
+
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {queues.map((q) => (
           <Card key={q.name} alarm={(q.counts.failed ?? 0) > 0}>
             <div className="flex items-center justify-between">
-              <BayTag bay={i + 1} alarm={(q.counts.failed ?? 0) > 0} />
-              <span className="dispatch-eyebrow text-steel-400">queue</span>
+              <h3 className="text-base font-semibold tracking-tight text-bone-100">
+                {q.name}
+              </h3>
+              <span className="eyebrow">queue</span>
             </div>
-            <h3 className="mt-2 text-lg font-semibold tracking-tight text-bone-100">
-              {q.name}
-            </h3>
-            <div className="mt-5 grid grid-cols-2 gap-2">
+            <div className="mt-4 grid grid-cols-2 gap-2">
               {ORDER.filter((k) => k in q.counts).map((k) => {
                 const v = q.counts[k];
                 const isFail = k === "failed" && v > 0;
                 return (
                   <div
                     key={k}
-                    className="rounded-[2px] bg-concrete-900/80 border border-concrete-700 p-3"
+                    className="rounded bg-[var(--bg)] border border-[var(--border)] p-3"
                   >
-                    <div className="dispatch-eyebrow text-concrete-600">
-                      {k}
-                    </div>
+                    <div className="eyebrow">{k}</div>
                     <div
                       className={
                         "mt-1 font-mono text-lg tabular-nums " +
@@ -68,13 +66,13 @@ export default function JobsPage() {
       </section>
 
       <Card>
-        <CardEyebrow>About the producers</CardEyebrow>
+        <SectionLabel>About the producers</SectionLabel>
         <p className="mt-3 text-sm text-bone-200 max-w-[72ch]">
-          The API enqueues an <code className="text-ember-400">order</code> and
-          an <code className="text-ember-400">email</code> job for every POST
-          /api/orders. Enable{" "}
+          Each <code className="text-ember-400">POST /api/orders</code> enqueues
+          an <code className="text-ember-400">order</code> job and an{" "}
+          <code className="text-ember-400">email</code> job. Enable{" "}
           <span className="font-mono text-bone-100">queue_backlog</span> to make
-          the API enqueue extras until the worker can&apos;t keep up. Enable{" "}
+          the API enqueue extras faster than the worker can drain. Enable{" "}
           <span className="font-mono text-bone-100">worker_failure</span> to
           have the worker throw on a fraction of every job.
         </p>

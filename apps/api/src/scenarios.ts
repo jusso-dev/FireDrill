@@ -1,30 +1,47 @@
 import { redis } from "./redis.js";
 import { setScenarioGauge } from "./metrics.js";
-import { SCENARIOS, SCENARIO_IDS, isScenarioId } from "@firedrill/shared";
+import {
+  SCENARIOS,
+  SCENARIO_IDS,
+  clampIntensity,
+  isScenarioId,
+} from "@firedrill/shared";
 import type { ScenarioId, ScenarioState } from "@firedrill/shared";
+import { logger } from "./logger.js";
 
 const KEY = (id: ScenarioId) => `firedrill:scenario:${id}`;
 
+function defaultState(id: ScenarioId): ScenarioState {
+  return {
+    id,
+    active: false,
+    startedAt: null,
+    endedAt: null,
+    intensity: SCENARIOS[id].defaultIntensity,
+    incidentId: null,
+  };
+}
+
 export async function getScenario(id: ScenarioId): Promise<ScenarioState> {
   const raw = await redis.get(KEY(id));
-  if (!raw) {
-    return {
-      id,
-      active: false,
-      startedAt: null,
-      endedAt: null,
-      intensity: SCENARIOS[id].defaultIntensity,
-      incidentId: null,
-    };
+  if (!raw) return defaultState(id);
+  try {
+    return JSON.parse(raw) as ScenarioState;
+  } catch (err) {
+    // Corrupt blob — reset rather than serving garbage.
+    logger.warn(
+      { id, err: (err as Error).message },
+      "scenario state corrupt; resetting to default",
+    );
+    return defaultState(id);
   }
-  return JSON.parse(raw) as ScenarioState;
 }
 
 export async function getAllScenarios(): Promise<ScenarioState[]> {
   return Promise.all(SCENARIO_IDS.map((id) => getScenario(id)));
 }
 
-export async function setScenario(state: ScenarioState): Promise<ScenarioState> {
+async function persist(state: ScenarioState): Promise<ScenarioState> {
   await redis.set(KEY(state.id), JSON.stringify(state));
   setScenarioGauge(state.id, state.active);
   return state;
@@ -32,28 +49,22 @@ export async function setScenario(state: ScenarioState): Promise<ScenarioState> 
 
 export async function enableScenario(
   id: ScenarioId,
-  opts: { intensity?: number; incidentId: string },
+  opts: { intensity?: unknown; incidentId: string },
 ): Promise<ScenarioState> {
   if (!isScenarioId(id)) throw new Error(`unknown scenario: ${id}`);
-  const next: ScenarioState = {
+  return persist({
     id,
     active: true,
     startedAt: new Date().toISOString(),
     endedAt: null,
-    intensity: opts.intensity ?? SCENARIOS[id].defaultIntensity,
+    intensity: clampIntensity(id, opts.intensity),
     incidentId: opts.incidentId,
-  };
-  return setScenario(next);
+  });
 }
 
 export async function disableScenario(id: ScenarioId): Promise<ScenarioState> {
   const current = await getScenario(id);
-  const next: ScenarioState = {
-    ...current,
-    active: false,
-    endedAt: new Date().toISOString(),
-  };
-  return setScenario(next);
+  return persist({ ...current, active: false, endedAt: new Date().toISOString() });
 }
 
 export async function resetAll(): Promise<void> {
@@ -66,8 +77,7 @@ export async function resetAll(): Promise<void> {
 }
 
 export async function isActive(id: ScenarioId): Promise<boolean> {
-  const s = await getScenario(id);
-  return s.active;
+  return (await getScenario(id)).active;
 }
 
 export async function intensityIfActive(id: ScenarioId): Promise<number | null> {

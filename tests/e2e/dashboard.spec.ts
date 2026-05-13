@@ -10,24 +10,27 @@ test.describe("FireDrill dashboard", () => {
     page,
     request,
   }) => {
-    // 1) Dashboard loads
+    // 1) Overview loads
     await page.goto("/");
-    await expect(page.getByText("System Health")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+    await expect(page.getByText("Services")).toBeVisible();
 
-    // 2) Enable latency_spike via scenarios page
+    // 2) Trigger latency_spike from the scenarios page
     await page.goto("/scenarios");
-    const latencyCard = page.locator("text=Latency Spike").locator("..").locator("..");
-    await latencyCard.getByRole("button", { name: /enable/i }).click();
-    await expect(latencyCard.getByText(/live/i)).toBeVisible();
+    const latencyCard = page
+      .locator('h3:has-text("Latency Spike")')
+      .locator("xpath=ancestor::*[contains(@class,'rounded-md')][1]");
+    await latencyCard.getByRole("button", { name: /trigger/i }).click();
+    await expect(latencyCard.getByText("live", { exact: false })).toBeVisible();
 
-    // 3) Active incident shows up on overview
+    // 3) Active incident appears on overview
     await page.goto("/");
-    await expect(
-      page.getByText(/Active incidents/i).first(),
-    ).toBeVisible();
+    await expect(page.getByText("Live incidents")).toBeVisible();
 
-    // 4) Disable via API and confirm UI updates
-    const list = await request.get("/api/proxy/api/incidents?status=open").then((r) => r.json());
+    // 4) Disable via API and confirm an incident was recorded
+    const list = await request
+      .get("/api/proxy/api/incidents?status=open")
+      .then((r) => r.json());
     expect(list.incidents.length).toBeGreaterThan(0);
     const incidentId = list.incidents[0].id;
 
@@ -35,8 +38,10 @@ test.describe("FireDrill dashboard", () => {
       data: { enabled: false },
     });
 
-    // 5) Generate report
-    const reportRes = await request.get(`/api/proxy/api/incidents/${incidentId}/report`);
+    // 5) Generate the post-incident report
+    const reportRes = await request.get(
+      `/api/proxy/api/incidents/${incidentId}/report`,
+    );
     expect(reportRes.ok()).toBeTruthy();
     const report = await reportRes.json();
     expect(report.incidentId).toBe(incidentId);

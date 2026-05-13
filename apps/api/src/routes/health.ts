@@ -1,7 +1,17 @@
 import type { FastifyInstance } from "fastify";
 import { pool } from "../db.js";
-import { dbQueryDuration, databaseHealthy } from "../metrics.js";
-import { isActive, intensityIfActive } from "../scenarios.js";
+import { databaseHealthy, dbQueryDuration } from "../metrics.js";
+import { intensityIfActive, isActive } from "../scenarios.js";
+
+type HealthStatus = "healthy" | "degraded" | "down";
+
+interface HealthBody {
+  status: HealthStatus;
+  service: "api";
+  database: "ok" | "down";
+  latencyMs: number;
+  at: string;
+}
 
 export async function healthRoutes(app: FastifyInstance) {
   app.get("/health", async (_req, reply) => {
@@ -10,7 +20,9 @@ export async function healthRoutes(app: FastifyInstance) {
     let dbOk = true;
     try {
       const slowdown = await intensityIfActive("db_slowdown");
-      if (slowdown) await new Promise((r) => setTimeout(r, slowdown));
+      if (slowdown && slowdown > 0) {
+        await new Promise((resolve) => setTimeout(resolve, slowdown));
+      }
       await pool.query("SELECT 1");
     } catch {
       dbOk = false;
@@ -18,14 +30,16 @@ export async function healthRoutes(app: FastifyInstance) {
       end();
     }
     databaseHealthy.set(dbOk ? 1 : 0);
-    const degraded = !dbOk || (await isActive("db_slowdown"));
-    const body = {
-      status: dbOk ? (degraded ? "degraded" : "healthy") : "down",
+
+    const dbSlow = dbOk ? await isActive("db_slowdown") : false;
+    const status: HealthStatus = !dbOk ? "down" : dbSlow ? "degraded" : "healthy";
+    const body: HealthBody = {
+      status,
       service: "api",
       database: dbOk ? "ok" : "down",
       latencyMs: Date.now() - start,
       at: new Date().toISOString(),
     };
-    reply.code(dbOk ? 200 : 503).send(body);
+    return reply.code(dbOk ? 200 : 503).send(body);
   });
 }

@@ -2,54 +2,25 @@
 import { cn } from "@/lib/cn";
 import { type ReactNode } from "react";
 
-/* ------------------------------ surfaces -------------------------------- */
+/* -------------------------- surfaces -------------------------- */
 
 export function Card({
   className,
   children,
-  rivets = false,
   alarm = false,
 }: {
   className?: string;
   children: ReactNode;
-  rivets?: boolean;
   alarm?: boolean;
 }) {
   return (
     <div
       className={cn(
-        "relative rounded-[3px] bg-concrete-800 border border-concrete-700",
-        "shadow-bay overflow-hidden",
-        alarm && "border-ember-700 bg-gradient-to-br from-ember-950/80 to-concrete-800 shadow-emberglow",
-        rivets && "rivets",
+        "rounded-md border bg-[var(--surface)] p-5",
+        alarm
+          ? "border-ember-700/70 bg-gradient-to-br from-ember-950/40 to-[var(--surface)]"
+          : "border-[var(--border)]",
         className,
-      )}
-    >
-      {rivets && (
-        <>
-          <span className="rivet-tl" />
-          <span className="rivet-tr" />
-          <span className="rivet-bl" />
-          <span className="rivet-br" />
-        </>
-      )}
-      <div className="p-5 relative">{children}</div>
-    </div>
-  );
-}
-
-export function CardEyebrow({
-  children,
-  alarm = false,
-}: {
-  children: ReactNode;
-  alarm?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "dispatch-eyebrow",
-        alarm ? "text-ember-500" : "text-steel-400",
       )}
     >
       {children}
@@ -57,138 +28,108 @@ export function CardEyebrow({
   );
 }
 
-export function CardTitle({ children }: { children: ReactNode }) {
-  return <CardEyebrow>{children}</CardEyebrow>;
-}
-
-/* --------------------------------- bay tag ------------------------------ */
-
-export function BayTag({
-  bay,
+export function SectionLabel({
+  children,
   alarm = false,
   className,
 }: {
-  bay: string | number;
+  children: ReactNode;
   alarm?: boolean;
   className?: string;
 }) {
   return (
-    <span
+    <div
       className={cn(
-        "inline-flex items-baseline gap-1.5",
-        "bay-tag text-[10px]",
-        alarm ? "text-ember-500" : "text-concrete-600",
+        "eyebrow",
+        alarm ? "text-ember-500" : undefined,
         className,
       )}
     >
-      <span className="text-[8px] tracking-[0.3em] text-concrete-600">BAY</span>
-      <span>{typeof bay === "number" ? String(bay).padStart(2, "0") : bay}</span>
-    </span>
+      {children}
+    </div>
   );
 }
 
-/* -------------------------------- metrics ------------------------------- */
+/* -------------------------- metrics --------------------------- */
+
+type Tone = "neutral" | "good" | "warn" | "bad";
+
+const VALUE_TONE: Record<Tone, string> = {
+  neutral: "text-bone-100",
+  good: "text-signal-green",
+  warn: "text-signal-yellow",
+  bad: "text-ember-500",
+};
+
+const DOT_TONE: Record<Exclude<Tone, "neutral">, string> = {
+  good: "bg-signal-green",
+  warn: "bg-signal-yellow",
+  bad: "bg-ember-500",
+};
 
 export function MetricTile({
-  bay,
   label,
   value,
   hint,
   tone = "neutral",
 }: {
-  bay: number | string;
   label: string;
   value: ReactNode;
   hint?: string;
-  tone?: "neutral" | "good" | "warn" | "bad";
+  tone?: Tone;
 }) {
-  const valueTone = {
-    neutral: "text-bone-100",
-    good: "text-signal-green",
-    warn: "text-signal-yellow",
-    bad: "text-ember-500",
-  }[tone];
-
-  const indicator = {
-    neutral: null,
-    good: <DotPill tone="good" />,
-    warn: <DotPill tone="warn" />,
-    bad: <DotPill tone="bad" />,
-  }[tone];
-
   return (
-    <div className="relative rounded-[3px] bg-concrete-800 border border-concrete-700 shadow-bay overflow-hidden">
-      {/* top hairline + label strip */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-1.5 border-b border-concrete-700/60 steel-surface">
-        <div className="flex items-center gap-2">
-          <BayTag bay={bay} alarm={tone === "bad"} />
-          <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-steel-400">
-            {label}
-          </span>
-        </div>
-        {indicator}
-      </div>
-      <div className="px-4 pt-4 pb-4">
-        <div className={cn("font-mono text-[1.95rem] leading-none tabular-nums", valueTone)}>
-          {value}
-        </div>
-        {hint && (
-          <div className="mt-2 text-[11px] text-steel-500 font-mono tracking-wide">
-            {hint}
-          </div>
+    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
+      <div className="flex items-center justify-between">
+        <span className="eyebrow">{label}</span>
+        {tone !== "neutral" && (
+          <span
+            className={cn(
+              "inline-block h-1.5 w-1.5 rounded-full",
+              DOT_TONE[tone],
+              tone === "bad" && "pulse",
+            )}
+          />
         )}
       </div>
+      <div className={cn("mt-2 font-mono text-3xl leading-none tabular-nums", VALUE_TONE[tone])}>
+        {value}
+      </div>
+      {hint && (
+        <div className="mt-2 text-[11px] text-steel-500 font-mono">{hint}</div>
+      )}
     </div>
   );
 }
 
-function DotPill({ tone }: { tone: "good" | "warn" | "bad" }) {
-  const cls = {
-    good: "bg-signal-green",
-    warn: "bg-signal-yellow",
-    bad: "bg-ember-500",
-  }[tone];
-  return (
-    <span
-      className={cn(
-        "inline-block h-1.5 w-1.5 rounded-full",
-        cls,
-        tone === "bad" && "alarm-pulse shadow-[0_0_8px_oklch(0.64_0.21_38/_0.8)]",
-      )}
-    />
-  );
-}
+/* -------------------------- status ---------------------------- */
 
-/* -------------------------------- status -------------------------------- */
+type Status = "healthy" | "degraded" | "down";
 
 export function StatusDot({
   status,
   pulse = false,
 }: {
-  status: "healthy" | "degraded" | "down";
+  status: Status;
   pulse?: boolean;
 }) {
   const cls = {
-    healthy: "bg-signal-green shadow-[0_0_8px_oklch(0.72_0.16_155/0.6)]",
-    degraded: "bg-signal-yellow shadow-[0_0_8px_oklch(0.83_0.16_92/0.55)]",
-    down: "bg-ember-500 shadow-[0_0_10px_oklch(0.64_0.21_38/0.8)]",
+    healthy: "bg-signal-green",
+    degraded: "bg-signal-yellow",
+    down: "bg-ember-500",
   }[status];
   return (
     <span
       className={cn(
         "inline-block h-2 w-2 rounded-full",
         cls,
-        pulse && status !== "healthy" && "alarm-pulse",
+        pulse && status !== "healthy" && "pulse",
       )}
     />
   );
 }
 
-export function StatusPill({
-  status,
-}: {
-  status: "healthy" | "degraded" | "down";
-}) {
+export function StatusPill({ status }: { status: Status }) {
   const cls = {
     healthy: "border-signal-green/40 text-signal-green",
     degraded: "border-signal-yellow/40 text-signal-yellow",
@@ -197,8 +138,8 @@ export function StatusPill({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border bg-concrete-900/80",
-        "font-mono text-[10px] uppercase tracking-[0.18em]",
+        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border bg-[var(--bg)]",
+        "font-mono text-[10px] uppercase tracking-wider",
         cls,
       )}
     >
@@ -208,7 +149,7 @@ export function StatusPill({
   );
 }
 
-/* --------------------------------- badge -------------------------------- */
+/* -------------------------- badge ----------------------------- */
 
 export function Badge({
   children,
@@ -218,7 +159,7 @@ export function Badge({
   tone?: "neutral" | "good" | "warn" | "bad" | "info";
 }) {
   const cls = {
-    neutral: "border-concrete-600 text-steel-300 bg-concrete-900",
+    neutral: "border-[var(--border)] text-steel-300 bg-[var(--bg)]",
     good: "border-signal-green/40 text-signal-green bg-signal-green-dim/15",
     warn: "border-signal-yellow/40 text-signal-yellow bg-signal-yellow-dim/15",
     bad: "border-ember-500/40 text-ember-500 bg-ember-950/40",
@@ -227,8 +168,8 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[2px] border",
-        "font-mono text-[10px] uppercase tracking-[0.18em]",
+        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded border",
+        "font-mono text-[10px] uppercase tracking-wider",
         cls,
       )}
     >
@@ -237,31 +178,33 @@ export function Badge({
   );
 }
 
-/* --------------------------------- button ------------------------------- */
+/* -------------------------- button ---------------------------- */
 
 export function Button({
   variant = "default",
   className,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "default" | "danger" | "ghost" | "alarm";
+  variant?: "default" | "danger" | "ghost" | "alarm" | "primary";
 }) {
   const v = {
     default:
       "bg-bone-100 hover:bg-bone-200 text-concrete-950 border border-bone-200/40 font-semibold",
+    primary:
+      "bg-bone-100 hover:bg-bone-200 text-concrete-950 border border-bone-200/40 font-semibold",
     alarm:
-      "bg-ember-600 hover:bg-ember-500 text-bone-100 border border-ember-500 shadow-[0_8px_24px_-12px_oklch(0.56_0.20_35/0.6)]",
+      "bg-ember-600 hover:bg-ember-500 text-bone-100 border border-ember-500 shadow-[0_4px_16px_-8px_oklch(0.56_0.20_35/0.6)]",
     danger:
       "bg-ember-900 hover:bg-ember-800 text-bone-100 border border-ember-700",
     ghost:
-      "bg-transparent hover:bg-concrete-800 text-steel-300 border border-concrete-700",
+      "bg-transparent hover:bg-concrete-800 text-steel-300 border border-[var(--border)]",
   }[variant];
   return (
     <button
       {...props}
       className={cn(
-        "inline-flex items-center justify-center gap-2 px-3.5 py-1.5 rounded-[2px]",
-        "font-mono text-[11px] tracking-[0.18em] uppercase",
+        "inline-flex items-center justify-center gap-2 px-3.5 py-1.5 rounded",
+        "font-medium text-xs tracking-wide",
         "transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed",
         v,
         className,
@@ -270,47 +213,57 @@ export function Button({
   );
 }
 
-/* ------------------------------ dispatch line --------------------------- */
+/* -------------------------- header ---------------------------- */
 
-export function DispatchLine({
-  bay,
-  page,
-  state,
+export function PageHeader({
+  title,
+  subtitle,
+  status,
   alarm = false,
+  actions,
 }: {
-  bay: string;
-  page: string;
-  state: ReactNode;
+  title: string;
+  subtitle?: string;
+  status?: ReactNode;
   alarm?: boolean;
+  actions?: ReactNode;
 }) {
   return (
-    <header className="relative">
-      <div
-        className={cn(
-          "absolute -top-1 left-0 right-0 h-0.5",
-          alarm ? "alarm-strip" : "hairline",
+    <header className="flex items-start justify-between gap-6">
+      <div className="min-w-0">
+        <h1
+          className={cn(
+            "text-2xl font-semibold tracking-tight",
+            alarm ? "text-ember-500" : "text-bone-100",
+          )}
+        >
+          {title}
+        </h1>
+        {subtitle && (
+          <p className="mt-1 text-sm text-steel-400 max-w-[64ch]">{subtitle}</p>
         )}
-      />
-      <div className="flex items-end justify-between gap-6 pt-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <BayTag bay={bay} alarm={alarm} />
-            <span className="dispatch-eyebrow text-steel-400">Dispatch</span>
-          </div>
-          <h1
-            className={cn(
-              "mt-2 text-[2.1rem] leading-none font-semibold tracking-tight",
-              alarm ? "text-ember-500" : "text-bone-100",
-            )}
-          >
-            {page}
-          </h1>
-        </div>
-        <div className="text-right">
-          <div className="dispatch-eyebrow text-steel-400">Status</div>
-          <div className="mt-2 text-sm font-mono text-steel-300">{state}</div>
-        </div>
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        {status && (
+          <div className="text-sm font-mono text-steel-300">{status}</div>
+        )}
+        {actions}
       </div>
     </header>
+  );
+}
+
+/* -------------------------- error ----------------------------- */
+
+export function ErrorPanel({ title, message }: { title: string; message: string }) {
+  return (
+    <Card alarm>
+      <SectionLabel alarm>{title}</SectionLabel>
+      <p className="mt-2 text-sm font-mono text-ember-400 break-words">{message}</p>
+      <p className="mt-2 text-xs text-steel-400">
+        Check the API is running:{" "}
+        <code className="text-bone-200">docker compose ps api</code>
+      </p>
+    </Card>
   );
 }
